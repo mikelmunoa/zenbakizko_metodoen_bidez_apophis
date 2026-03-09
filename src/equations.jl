@@ -1,4 +1,3 @@
-using LinearAlgebra
 using StaticArrays # Gomendatua: svector-ak erabiltzeko
 
 """
@@ -16,28 +15,25 @@ function f_all!(du, u, p, t)
 
     ax, ay, az = 0.0, 0.0, 0.0
 
-    # 2. Grabitatearen kalkulua (Loop optimizatua)
-    @inbounds for i in 1:length(p.mus)
-        # Gorputzaren posizioa lortu
-        # Pentsatu: p.bodies[i] finko bat izan daiteke edo funtzio bat: p.bodies(t)[i]
-        bx, by, bz = p.bodies[i](t)
+    # 2. Grabitatearen kalkulua
+    # zip + Tuple erabiltzen da: konpiladoreak luzera ezagutzen du,
+    # loop-a unroll egin dezake, eta 0 heap alokazio sortzen dira.
+    @inbounds for (mu_i, body_i) in zip(p.mus, p.bodies)
+        bx, by, bz = body_i(t)
 
         dx = bx - x
         dy = by - y
         dz = bz - z
 
-        r_sq = dx^2 + dy^2 + dz^2
+        # muladd: FMA instrukzioa erabiltzen du (azkarragoa eta zehatzagoa)
+        r_sq = muladd(dx, dx, muladd(dy, dy, dz * dz))
 
-        # Singulartasunak saihesteko (softening), aukerakoa:
-        # r_sq += 1e-12
-
-        # Doitasun handiko eta abiadura optimizatuko grabitatea
         inv_r = 1.0 / sqrt(r_sq)
-        common = p.mus[i] * (inv_r^3)
+        common = mu_i * inv_r * inv_r * inv_r
 
-        ax += dx * common
-        ay += dy * common
-        az += az + (dz * common) # Kontuz: az metatu behar da
+        ax = muladd(dx, common, ax)
+        ay = muladd(dy, common, ay)
+        az = muladd(dz, common, az)
     end
 
     # 3. Deribatuak esleitu
