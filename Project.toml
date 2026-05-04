@@ -12,7 +12,18 @@ SPICE = "5bab7191-041a-5c2e-a744-024b9c3a5062"
 SciMLBase = "0bca4576-84f4-4d90-8ffe-ffa030f20462"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 
+[extras]
+Test = "8dfed614-e22c-358e-b074-27fbfce351ab"
+
+[targets]
+test = ["Test"]
+
 [compat]
-LinearAlgebra = "1.12.0"
-OrdinaryDiffEq = "6.108.0"
-SciMLBase = "2.144.0"
+julia = "1.9, 1.10, 1.11"
+IRKGaussLegendre = "0.1"
+LinearAlgebra = "1"
+LittleEphemeris = "0.1"
+OrdinaryDiffEq = "6"
+SPICE = "0.2"
+SciMLBase = "2"
+StaticArrays = "1"

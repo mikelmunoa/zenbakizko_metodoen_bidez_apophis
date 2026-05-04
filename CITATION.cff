@@ -1,0 +1,56 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+type: software
+title: "GravitationSimulation.jl: High-precision N-body gravitational simulation for near-Earth asteroids"
+authors:
+  - family-names: "Muñoa Illarregi"
+    given-names: "Mikel"
+version: 0.1.0
+date-released: 2025-06-01
+url: "https://github.com/mikelmunoa/zenbakizko_metodoen_bidez_apophis"
+repository-code: "https://github.com/mikelmunoa/zenbakizko_metodoen_bidez_apophis"
+license: MIT
+abstract: >
+  Julia package for high-precision gravitational N-body simulation of
+  near-Earth asteroids. Implements post-Newtonian corrections following
+  Damour & Deruelle (1985), zonal harmonic perturbations (J2, J3, J4)
+  for Earth and Sun, and uses SPICE-based Chebyshev polynomial ephemeris
+  interpolation via LittleEphemeris.jl. Developed as a Bachelor's thesis
+  (GrAL) at the University of the Basque Country (UPV/EHU).
+keywords:
+  - astrodynamics
+  - N-body simulation
+  - Julia
+  - Apophis
+  - post-Newtonian gravity
+  - near-Earth asteroids
+  - IRKGL16
+  - Chebyshev ephemeris
+references:
+  - type: article
+    authors:
+      - family-names: "Damour"
+        given-names: "T."
+      - family-names: "Deruelle"
+        given-names: "N."
+    title: "General relativistic celestial mechanics of binary systems. I. The post-Newtonian motion"
+    journal: "Annales de l'Institut Henri Poincaré A"
+    year: 1985
+    volume: 43
+    issue: 1
+    start: 107
+    end: 132
+  - type: article
+    authors:
+      - family-names: "Holman"
+        given-names: "Matthew J."
+      - family-names: "Akmal"
+        given-names: "Arya"
+      - family-names: "Hernandez"
+        given-names: "David M."
+    title: "ASSIST: An Ephemeris-quality Test-particle Integrator"
+    journal: "The Planetary Science Journal"
+    year: 2023
+    volume: 4
+    issue: 4
+    doi: "10.3847/PSJ/acc9a9"

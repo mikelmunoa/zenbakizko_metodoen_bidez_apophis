@@ -1,0 +1,32 @@
+# Julia
+*.jl.cov
+*.jl.*.cov
+*.jl.mem
+/Manifest.toml   # paketea balitz kentzen litzateke; GrAL-erako Manifest gorde
+*.ji
+
+# SPICE kernels — handiegiak git-erako
+data/kernels/*.bsp
+data/kernels/*.tls
+data/kernels/*.tpc
+data/kernels/*.tf
+data/kernels/*.ti
+data/kernels/*.bc
+
+# Jupyter
+notebooks/.ipynb_checkpoints/
+.ipynb_checkpoints/
+
+# Docs build
+docs/build/
+docs/site/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*~
+
+# OS
+.DS_Store
+Thumbs.db
