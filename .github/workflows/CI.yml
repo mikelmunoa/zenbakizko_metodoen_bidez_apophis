@@ -46,11 +46,11 @@ jobs:
         uses: actions/cache@v4
         with:
           path: data/kernels
-          key: ${{ runner.os }}-spice-kernels-${{ hashFiles('data/download_kernels.sh') }}
+          key: ${{ runner.os }}-spice-kernels-${{ hashFiles('data/download_kernels.jl') }}
 
       - name: SPICE kernelak deskargatu (cachean ez badaude)
         if: steps.cache-kernels.outputs.cache-hit != 'true'
-        run: bash data/download_kernels.sh
+        run: julia data/download_kernels.jl
       # --------------------------------------------------------
 
       - uses: julia-actions/julia-runtest@v1
