@@ -40,6 +40,19 @@ jobs:
 
       - uses: julia-actions/julia-buildpkg@v1
 
+      # ---------------- BERRIA: SPICE KERNELAK ----------------
+      - name: SPICE kernelen cachea
+        id: cache-kernels
+        uses: actions/cache@v4
+        with:
+          path: data/kernels
+          key: ${{ runner.os }}-spice-kernels-${{ hashFiles('data/download_kernels.sh') }}
+
+      - name: SPICE kernelak deskargatu (cachean ez badaude)
+        if: steps.cache-kernels.outputs.cache-hit != 'true'
+        run: bash data/download_kernels.sh
+      # --------------------------------------------------------
+
       - uses: julia-actions/julia-runtest@v1
         env:
           JULIA_NUM_THREADS: 2

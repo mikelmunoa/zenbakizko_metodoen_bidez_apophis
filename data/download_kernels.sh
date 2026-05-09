@@ -32,3 +32,6 @@ echo "Place it in: $KERNELS_DIR/"
 
 echo ""
 echo "Done. Kernels downloaded to: $KERNELS_DIR"
+# Apophis kernel (automatikoki deskargatuko da orain)
+wget -N -q --show-progress -P "$KERNELS_DIR" \
+    "https://ssd.jpl.nasa.gov/ftp/ssd/small_body/spk/asteroid/2099942.bsp"
