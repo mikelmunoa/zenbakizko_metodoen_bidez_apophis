@@ -3,40 +3,47 @@ using StaticArrays # Gomendatua: svector-ak erabiltzeko
 # ── Konpilazio-denborako konstanteak ──────────────────────────────────────────
 # Module-mailako const-ak konpiladoreari bermatzen dio hauek behin kalkulatzen
 # direla eta inline erabil daitezkeela, baita trig funtzioak direla ere.
-const _C2       = 299792.458^2          # km²/s²  (c²)
-const _J2_SUN   = 2.2e-7
-const _R_SUN    = 695700.0              # km
-const _J2_EARTH = 1.08e-3
-const _J3_EARTH = -2.53e-6
-const _J4_EARTH = -1.62e-6
-const _R_EARTH  = 6378.137             # km
+const _C2       = 299792.458^2              # km²/s²  (c²)
+const _J2_SUN   = 2.1961391516529825e-7    # DE440 balioa (ASSIST-ekin bat)
+const _R_SUN    = 696000.0                 # km — DE440 ASUN (ASSIST-ekin bat)
+const _J2_EARTH = 0.00108262539            # DE440 balioa (ASSIST-ekin bat)
+const _J3_EARTH = -2.53241e-6              # DE440 balioa (ASSIST-ekin bat)
+const _J4_EARTH = -1.619898e-6             # DE440 balioa (ASSIST-ekin bat)
+const _R_EARTH  = 6378.1366               # km — DE440 RE (ASSIST-ekin bat)
 # Eguzkiaren polo-ardatza: RA=286.13°, Dec=63.87° (Park et al. 2021, DE441)
 const _CAS = cos(286.13 * π / 180.0)   # cos(RA_Sun)
 const _SAS = sin(286.13 * π / 180.0)   # sin(RA_Sun)
 const _CDS = cos(63.87  * π / 180.0)   # cos(Dec_Sun)
 const _SDS = sin(63.87  * π / 180.0)   # sin(Dec_Sun)
+# Yarkovsky / indar ez-grabitatorioa (ASSIST NON_GRAVITATIONAL): unitate-bihurketa
+const _AU2KM     = 149_597_870.7            # km/AU (DE440)
+const _DAY2S     = 86_400.0                 # s/egun
+const _YARK_CONV = _AU2KM^3 / _DAY2S^2      # km³/s² — A[AU/egun²]·g·û → km/s²
 
 """
     _find_required_indices(ids)
 
 NAIF ID hauen indizeak bilatu:
 - 10: Eguzkia
-- 3: Earth-Moon Barycenter (EMB)
-- 301: Ilargia (EMB-rekiko)
+- 399: Lurra (barizentrikoa, SSB-rekiko) — `f_master!`-entzat nahitaezkoa
+- 301: Ilargia (barizentrikoa, SSB-rekiko)
+
+Oharra: body 3 (EMB) ere onartzen da funtzio zaharrentzat (`f_all!`, `f_all_rel!`, ...).
+`f_master!` bertan body 399 besterik ez du onartzen.
 """
 @inline function _find_required_indices(ids)
-    idx_sun = 0
-    idx_emb = 0
-    idx_moon = 0
+    idx_sun   = 0
+    idx_earth = 0  # 399 (Lurra, barizentrikoa) edo 3 (EMB, funtzio zaharrentzat)
+    idx_moon  = 0
     @inbounds for j in eachindex(ids)
         idj = ids[j]
-        idj == 10  && (idx_sun = j)
-        idj == 3   && (idx_emb = j)
-        idj == 301 && (idx_moon = j)
+        idj == 10                && (idx_sun   = j)
+        (idj == 399 || idj == 3) && (idx_earth = j)
+        idj == 301               && (idx_moon  = j)
     end
-    (idx_sun == 0 || idx_emb == 0 || idx_moon == 0) &&
-        throw(ArgumentError("p.ids-en NAIF IDak falta dira: beharrezkoak 10 (Sun), 3 (EMB), 301 (Moon)"))
-    return idx_sun, idx_emb, idx_moon
+    (idx_sun == 0 || idx_earth == 0 || idx_moon == 0) &&
+        throw(ArgumentError("p.ids-en NAIF IDak falta dira: beharrezkoak 10 (Sun), 399 (Earth), 301 (Moon)"))
+    return idx_sun, idx_earth, idx_moon
 end
 
 """
@@ -316,9 +323,9 @@ function f_all_rel_J!(du, u, p, t)
             # Biraketa sinplifikatua: cos(0°)=1, sin(0°)=0, cos(90°)≈0, sin(90°)=1
             #   dxp_e = dy,  dyp_e = -dx,  dzp_e = dz
             # Itzulera: ax -= resy_e,  ay += resx_e,  az += resz_e
-            dxp_e =  dy
-            dyp_e = -dx
-            dzp_e =  dz
+            dxp_e = -dy
+            dyp_e =  dx
+            dzp_e = -dz
 
             # Kalkuluak Lurraren ekuatorialean
             r = sqrt(r_sq)
@@ -412,22 +419,32 @@ fisika-efektu aukeragarriekin — ASSIST-en moduan.
 `p` parametroetan `physics` eremu aukerazkoa (NamedTuple):
 
     physics = (
-        gr       = true,   # Damour-Deruelle erlatibitatearen efektua (Eguzkia)
-        j2_sun   = false,  # Eguzkiaren J2 harmonikoa (Park et al. 2021)
-        j2_earth = false,  # Lurraren J2 harmonikoa
-        j3_earth = false,  # Lurraren J3 harmonikoa
-        j4_earth = false,  # Lurraren J4 harmonikoa
+        gr        = true,   # Damour-Deruelle erlatibitatearen efektua (Eguzkia)
+        j2_sun    = false,  # Eguzkiaren J2 harmonikoa (Park et al. 2021)
+        j2_earth  = false,  # Lurraren J2 harmonikoa
+        j3_earth  = false,  # Lurraren J3 harmonikoa
+        j4_earth  = false,  # Lurraren J4 harmonikoa
+        yarkovsky = false,  # Yarkovsky/indar ez-grabitatorioa (ASSIST NON_GRAVITATIONAL)
+        A1 = 0.0, A2 = 0.0, A3 = 0.0,   # Yarkovsky parametroak (AU/egun²); yarkovsky=true bada
     )
+
+`yarkovsky` aukeran bada (`get`-ekin irakurria), `A1/A2/A3` ere egon behar dira
+`physics`-en. Apophis: A1=5.0e-13, A2=-2.9e-14, A3=0.0.
 
 `physics` ematen ez bada, balioak aurrenak dira: GR aktibo, harmonikorik gabe
 (hots, `f_all_rel!`-en baliokidea).
 
 Adibidea:
-    p = (mus   = [mu_S, mu_E, mu_M],
-         bodies = [Sun, Earth, Moon],
-         ids    = [10, 3, 301],
+    p = (mus     = [mu_S, mu_E, mu_M],
+         ids     = [10, 399, 301],          # body 399 (Lurra, barizentrikoa) nahitaez
          physics = (gr=true, j2_sun=true, j2_earth=true, j3_earth=true, j4_earth=false))
     RK4(u0, t0, t_end, h, p, f_master!, m_out)
+
+OHARRA: `p.ids`-ek 10 (Eguzkia), 399 edo 3 (Lurra/EMB), eta 301 (Ilargia) eduki behar ditu.
+`p.bodies` (LittleEphemeris BodyCoeffs) beharrezkoa da: posizioak `p.bodies[i](t)` bidez jasotzen dira.
+  - ids[idx_earth] == 399 → Earth barizentrikoa zuzenean; Moon barizentrikoa zuzenean
+  - ids[idx_earth] == 3   → EMB barizentrikoa; Ilargia EMB-rekiko (LittleEphemeris konbentzioa)
+Bi kasuetan J2/J3/J4 harmonikoak aplikatzen dira idx_earth gorputzarentzat.
 """
 Base.@constprop :aggressive function f_master!(du, u, p, t)
     x, y, z    = u[1], u[2], u[3]
@@ -443,18 +460,33 @@ Base.@constprop :aggressive function f_master!(du, u, p, t)
 
     ax, ay, az = 0.0, 0.0, 0.0
 
-    idx_sun, idx_emb, idx_moon = _find_required_indices(p.ids)
-    emb_state = p.bodies[idx_emb](t)
-    moon_rel  = p.bodies[idx_moon](t)
-    mu_ratio  = p.mus[idx_moon] / p.mus[idx_emb]
+    idx_sun, idx_earth, idx_moon = _find_required_indices(p.ids)
 
-    @inbounds for (i, (mu_i, body_i)) in enumerate(zip(p.mus, p.bodies))
-        if i == idx_emb
-            state_i = emb_state .- mu_ratio .* moon_rel
+    # Earth/Moon posizioak p.bodies[i](t) bidez (0-alokazio SVector, ez spkez):
+    #   ids[idx_earth] == 399 → Earth eta Moon biak barizentrikoak zuzenean (gomendatua)
+    #   ids[idx_earth] == 3   → EMB barizentrikoa; Moon BARIZENTRIKOA ere bai
+    #     (LittleEphemeris-ek spkez(301,...,0) erabiltzen du → Moon barizentrikoa,
+    #      ez EMB-rekiko erlatiboa. moon_rel = moon_bary - emb bidez zuzentzen da.)
+    if p.ids[idx_earth] == 3
+        emb_state   = p.bodies[idx_earth](t)
+        moon_bary   = p.bodies[idx_moon](t)
+        moon_rel    = moon_bary .- emb_state          # Moon EMB-rekiko benetakoa
+        mu_ratio    = p.mus[idx_moon] / (p.mus[idx_earth] + p.mus[idx_moon])
+        earth_state = emb_state .- mu_ratio .* moon_rel
+        moon_state  = moon_bary
+    else  # 399
+        earth_state = p.bodies[idx_earth](t)
+        moon_state  = p.bodies[idx_moon](t)
+    end
+
+    @inbounds for i in eachindex(p.mus)
+        mu_i = p.mus[i]
+        if i == idx_earth
+            state_i = earth_state
         elseif i == idx_moon
-            state_i = emb_state .+ moon_rel
+            state_i = moon_state
         else
-            state_i = body_i(t)
+            state_i = p.bodies[i](t)
         end
         bx, by, bz = state_i[1], state_i[2], state_i[3]
 
@@ -491,9 +523,11 @@ Base.@constprop :aggressive function f_master!(du, u, p, t)
 
             # Eguzkiaren J2
             if cfg.j2_sun
-                dxp = muladd(-dx, _SAS, dy * _CAS)
-                dyp = muladd(-dx, _CAS * _SDS, muladd(-dy, _SAS * _SDS, dz * _CDS))
-                dzp = muladd( dx, _CAS * _CDS, muladd( dy, _SAS * _CDS, dz * _SDS))
+                # ASSIST konbentzioa: d = asteroidea − Eguzkia (rx_h), EZ Eguzkia − ast (dx).
+                # J2 azelerazioa d-rekiko BAKOITIA da → zeinu egokia rx_h erabiliz.
+                dxp = muladd(-rx_h, _SAS, ry_h * _CAS)
+                dyp = muladd(-rx_h, _CAS * _SDS, muladd(-ry_h, _SAS * _SDS, rz_h * _CDS))
+                dzp = muladd( rx_h, _CAS * _CDS, muladd( ry_h, _SAS * _CDS, rz_h * _SDS))
                 cth2   = dzp * dzp * inv_r2
                 J2pref = 3.0 * _J2_SUN * _R_SUN^2 * inv_r3 * inv_r2 / 2.0
                 J2f    = muladd(5.0, cth2, -1.0)
@@ -505,13 +539,37 @@ Base.@constprop :aggressive function f_master!(du, u, p, t)
                 az += muladd(resy, _CDS, resz * _SDS)
             end
 
-        # ── Lurraren efektuak (NAIF 3 / EMB) ────────────────────────────────
-        elseif i == idx_emb
+            # ── Yarkovsky / indar ez-grabitatorioa (ASSIST NON_GRAVITATIONAL) ──
+            #   a = (1/r²)·(A1·r̂ + A2·t̂ + A3·n̂);  h = d×v (normala), t = h×d (transbertsala)
+            #   A AU/egun² → km/s²:  × _YARK_CONV/r_h²  (r̂,t̂,n̂ eskala-independenteak)
+            if get(cfg, :yarkovsky, false)
+                A1y = cfg.A1;  A2y = cfg.A2;  A3y = cfg.A3
+                inv_rh = 1.0 / r_h
+                ur1 = rx_h * inv_rh;  ur2 = ry_h * inv_rh;  ur3 = rz_h * inv_rh   # r̂
+                hx = ry_h * vz_h - rz_h * vy_h                                     # h = d×v
+                hy = rz_h * vx_h - rx_h * vz_h
+                hz = rx_h * vy_h - ry_h * vx_h
+                inv_h = 1.0 / sqrt(muladd(hx, hx, muladd(hy, hy, hz * hz)))
+                un1 = hx * inv_h;  un2 = hy * inv_h;  un3 = hz * inv_h             # n̂
+                tx = hy * rz_h - hz * ry_h                                         # t = h×d
+                ty = hz * rx_h - hx * rz_h
+                tz = hx * ry_h - hy * rx_h
+                inv_t = 1.0 / sqrt(muladd(tx, tx, muladd(ty, ty, tz * tz)))
+                ut1 = tx * inv_t;  ut2 = ty * inv_t;  ut3 = tz * inv_t             # t̂
+                gc = _YARK_CONV * inv_rh * inv_rh                                  # (1/r²)·bihurketa
+                ax += gc * muladd(A1y, ur1, muladd(A2y, ut1, A3y * un1))
+                ay += gc * muladd(A1y, ur2, muladd(A2y, ut2, A3y * un2))
+                az += gc * muladd(A1y, ur3, muladd(A2y, ut3, A3y * un3))
+            end
+
+        # ── Lurraren efektuak (NAIF 399) ─────────────────────────────────────
+        elseif i == idx_earth
             if cfg.j2_earth || cfg.j3_earth || cfg.j4_earth
-                # RAe=0°, Dece=90° → dxp_e=dy, dyp_e=-dx, dzp_e=dz
-                dxp_e  =  dy
-                dyp_e  = -dx
-                dzp_e  =  dz
+                # RAe=0°, Dece=90°; d = ast − Lurra (ASSIST konbentzioa, EZ Lurra − ast).
+                # J2/J4 d-rekiko bakoitiak dira → zeinu egokia d = ast−Lurra erabiliz.
+                dxp_e  = -dy
+                dyp_e  =  dx
+                dzp_e  = -dz
                 cth2_e = dzp_e * dzp_e * inv_r2
 
                 resx_e = 0.0;  resy_e = 0.0;  resz_e = 0.0
@@ -684,9 +742,10 @@ function f_all_rel_J2_Sun!(du, u, p, t)
             az += coef * muladd(term1, rz_h, 4.0 * r_dot_v * vz_h)
 
             # --- Eguzkiaren J2 (Solar frame rotation) ---
-            dxp = muladd(-dx, _SAS, dy * _CAS)
-            dyp = muladd(-dx, _CAS * _SDS, muladd(-dy, _SAS * _SDS, dz * _CDS))
-            dzp = muladd( dx, _CAS * _CDS, muladd( dy, _SAS * _CDS, dz * _SDS))
+            # ASSIST konbentzioa: d = ast − Eguzkia (rx_h), EZ Eguzkia − ast (dx). J2 d-rekiko bakoitia.
+            dxp = muladd(-rx_h, _SAS, ry_h * _CAS)
+            dyp = muladd(-rx_h, _CAS * _SDS, muladd(-ry_h, _SAS * _SDS, rz_h * _CDS))
+            dzp = muladd( rx_h, _CAS * _CDS, muladd( ry_h, _SAS * _CDS, rz_h * _SDS))
 
             costheta2 = dzp * dzp * inv_r2
             J2_prefac = 3.0 * _J2_SUN * _R_SUN^2 / (r_sq * r_sq * r * 2.0)
@@ -794,9 +853,10 @@ function f_all_rel_J2_Sun_Earth!(du, u, p, t)
             az += coef * muladd(term1, rz_h, 4.0 * r_dot_v * vz_h)
 
             # --- Eguzkiaren J2 (Solar frame rotation) ---
-            dxp = muladd(-dx, _SAS, dy * _CAS)
-            dyp = muladd(-dx, _CAS * _SDS, muladd(-dy, _SAS * _SDS, dz * _CDS))
-            dzp = muladd( dx, _CAS * _CDS, muladd( dy, _SAS * _CDS, dz * _SDS))
+            # ASSIST konbentzioa: d = ast − Eguzkia (rx_h), EZ Eguzkia − ast (dx). J2 d-rekiko bakoitia.
+            dxp = muladd(-rx_h, _SAS, ry_h * _CAS)
+            dyp = muladd(-rx_h, _CAS * _SDS, muladd(-ry_h, _SAS * _SDS, rz_h * _CDS))
+            dzp = muladd( rx_h, _CAS * _CDS, muladd( ry_h, _SAS * _CDS, rz_h * _SDS))
 
             costheta2 = dzp * dzp * inv_r2
             J2_prefac = 3.0 * _J2_SUN * _R_SUN^2 / (r_sq * r_sq * r * 2.0)
@@ -820,9 +880,9 @@ function f_all_rel_J2_Sun_Earth!(du, u, p, t)
         elseif i == idx_emb
             # Lurraren poloa: RAe=0°, Dece=90° (J2000 ekuatorian)
             # Biraketa sinplifikatua: dxp_e=dy, dyp_e=-dx, dzp_e=dz
-            dxp_e =  dy
-            dyp_e = -dx
-            dzp_e =  dz
+            dxp_e = -dy
+            dyp_e =  dx
+            dzp_e = -dz
 
             costheta2_e = dzp_e * dzp_e * inv_r2
 
@@ -854,10 +914,6 @@ function f_all_rel_J2_Sun_Earth!(du, u, p, t)
             ax -= resy_e
             ay += resx_e
             az += resz_e
-
-            ax += resxp_e
-            ay += resyp_e
-            az += reszp_e
         end
     end
 
