@@ -446,6 +446,68 @@ OHARRA: `p.ids`-ek 10 (Eguzkia), 399 edo 3 (Lurra/EMB), eta 301 (Ilargia) eduki 
   - ids[idx_earth] == 3   → EMB barizentrikoa; Ilargia EMB-rekiko (LittleEphemeris konbentzioa)
 Bi kasuetan J2/J3/J4 harmonikoak aplikatzen dira idx_earth gorputzarentzat.
 """
+# GR_EIH azelerazioa FUNTZIO-LANGAN: argumentu konkretuetan espezializatzen da → type-egonkorra,
+# boxing gabe (f_master!-en testuinguruan earth_state ::Any izanda ere, hemen konkretua da).
+# EZ @inline — bereiz konpilatzeak langaren onura ematen du.
+function _eih_accel(x, y, z, vx, vy, vz, mus, bodies,
+                    idx_e::Int, earth_st, idx_m::Int, moon_st, t, n_src::Int, c2::Float64)
+    over_c2 = 1.0 / c2
+    st = Vector{typeof(earth_st)}(undef, n_src)
+    @inbounds for i in 1:n_src
+        st[i] = i == idx_e ? earth_st : (i == idx_m ? moon_st : bodies[i](t))
+    end
+    ax = 0.0; ay = 0.0; az = 0.0
+    vi2 = muladd(vx, vx, muladd(vy, vy, vz * vz))
+    t7x = 0.0; t7y = 0.0; t7z = 0.0
+    t8x = 0.0; t8y = 0.0; t8z = 0.0
+    @inbounds for jj in 1:n_src
+        μj = mus[jj];  sj = st[jj]
+        xj = sj[1]; yj = sj[2]; zj = sj[3]; vxj = sj[4]; vyj = sj[5]; vzj = sj[6]
+        dxij = x - xj;  dyij = y - yj;  dzij = z - zj
+        rij2 = muladd(dxij, dxij, muladd(dyij, dyij, dzij * dzij));  rij = sqrt(rij2)
+        prefacij = μj / (rij2 * rij)
+        term2 = over_c2 * vi2
+        vj2   = muladd(vxj, vxj, muladd(vyj, vyj, vzj * vzj))
+        term3 = 2.0 * over_c2 * vj2
+        vidotvj = muladd(vx, vxj, muladd(vy, vyj, vz * vzj))
+        term4 = -4.0 * over_c2 * vidotvj
+        rijdotvj = muladd(dxij, vxj, muladd(dyij, vyj, dzij * vzj))
+        term5 = -1.5 * over_c2 * rijdotvj * rijdotvj / rij2
+        fx = muladd(4.0, vx, -3.0 * vxj);  fy = muladd(4.0, vy, -3.0 * vyj);  fz = muladd(4.0, vz, -3.0 * vzj)
+        f  = muladd(dxij, fx, muladd(dyij, fy, dzij * fz))
+        pf_f = prefacij * f
+        t7x = muladd(pf_f, vx - vxj, t7x);  t7y = muladd(pf_f, vy - vyj, t7y);  t7z = muladd(pf_f, vz - vzj, t7z)
+        term0 = 0.0;  term1 = 0.0;  axj = 0.0;  ayj = 0.0;  azj = 0.0
+        @inbounds for kk in 1:n_src
+            μk = mus[kk];  sk = st[kk]
+            xk = sk[1]; yk = sk[2]; zk = sk[3]
+            dxik = x - xk;  dyik = y - yk;  dzik = z - zk
+            rik = sqrt(muladd(dxik, dxik, muladd(dyik, dyik, dzik * dzik)))
+            term0 += μk / rik
+            if kk != jj
+                dxjk = xj - xk;  dyjk = yj - yk;  dzjk = zj - zk
+                rjk2 = muladd(dxjk, dxjk, muladd(dyjk, dyjk, dzjk * dzjk));  rjk = sqrt(rjk2)
+                term1 += μk / rjk
+                fac = μk / (rjk2 * rjk)
+                axj -= fac * dxjk;  ayj -= fac * dyjk;  azj -= fac * dzjk
+            end
+        end
+        term0 *= -4.0 * over_c2
+        term1 *= -1.0 * over_c2
+        rijdotaj = muladd(dxij, axj, muladd(dyij, ayj, dzij * azj))
+        term6 = -0.5 * over_c2 * rijdotaj
+        t8f = μj / rij * 3.5
+        t8x = muladd(t8f, axj, t8x);  t8y = muladd(t8f, ayj, t8y);  t8z = muladd(t8f, azj, t8z)
+        factor = term0 + term1 + term2 + term3 + term4 + term5 + term6
+        ax += -prefacij * dxij * factor
+        ay += -prefacij * dyij * factor
+        az += -prefacij * dzij * factor
+    end
+    return (ax + (t7x + t8x) * over_c2,
+            ay + (t7y + t8y) * over_c2,
+            az + (t7z + t8z) * over_c2)
+end
+
 Base.@constprop :aggressive function f_master!(du, u, p, t)
     x, y, z    = u[1], u[2], u[3]
     vx, vy, vz = u[4], u[5], u[6]
@@ -604,6 +666,19 @@ Base.@constprop :aggressive function f_master!(du, u, p, t)
                 az += resz_e
             end
         end
+    end
+
+    # ── GR_EIH (Einstein-Infeld-Hoffmann, N-gorputz 1PN; β=γ=1) ──────────────
+    #   ASSIST forces.c-ko formula zehatza. d = asteroidea − gorputza (ASSIST konbentzioa),
+    #   barizentrikoan offsetik gabe (xo=vo=ao=0). gr_eih=true erabiltzeko, gr=false ezarri.
+    #   OPTIMIZAZIOA: (1) gorputz-egoerak behin kalkulatu (cache), begizta bikoitzean berriz
+    #   ebaluatu beharrean; (2) iturriak `cfg.n_eih`-ra murriztu (planetak; lehenetsia gorputz
+    #   guztiak). Asteroide-iturrien ekarpen erlatibista arbuiagarria da → n_eih = planeta kop.
+    if get(cfg, :gr_eih, false)
+        n_src = min(get(cfg, :n_eih, length(p.mus))::Int, length(p.mus))
+        eax, eay, eaz = _eih_accel(x, y, z, vx, vy, vz, p.mus, p.bodies,
+                                   idx_earth, earth_state, idx_moon, moon_state, t, n_src, _C2)
+        ax += eax;  ay += eay;  az += eaz
     end
 
     du[1] = vx;  du[2] = vy;  du[3] = vz
