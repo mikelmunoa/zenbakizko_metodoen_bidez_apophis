@@ -21,14 +21,10 @@ hp=[-5.5946538550488512e-1,8.5647564757574512e-1,3.0415066217102493e-1]
 hv=[-1.3818324735921638e-2,-6.0088275597939191e-3,-2.5805044631309632e-3]
 u0_holman=[hp[1]*AU2KM+sun_st[1],hp[2]*AU2KM+sun_st[2],hp[3]*AU2KM+sun_st[3],hv[1]*AU2KM/DAY2S+sun_st[4],hv[2]*AU2KM/DAY2S+sun_st[5],hv[3]*AU2KM/DAY2S+sun_st[6]]
 
-bids=[10,399,301,1,2,4,5,6,7,8]; bmus=[1.32712440041279e11,398600.436,4902.800,22031.869,324858.592,42828.376,1.267127641e8,3.7940584842e7,5.7945564e6,6.836527101e6]
-aids=[2_000_001,2_000_002,2_000_003,2_000_004,2_000_007,2_000_010,2_000_015,2_000_016,2_000_031,2_000_052,2_000_065,2_000_087,2_000_088,2_000_107,2_000_511,2_000_704]
-amus=[62.6289,13.6659,1.9206,17.2882,1.1399,5.6251,2.0230,1.5897,1.0794,2.6830,0.9381,2.1682,1.1898,1.4437,3.8945,2.8304]
-tiv=(et_0-5*DAY2S,et_2030+5*DAY2S); allids=vcat(bids,aids); fb=Dict{Int,Tuple{Int,Int}}(id=>(13,8) for id in aids); fb[399]=(13,8)
-create_coeffs_file("data/coeffs_ms.json","data/coeffs_ms.csv",allids,fill(tiv,length(allids));fallback_params=fb)
-bod=[BodyCoeffs("data/coeffs_ms.json","data/coeffs_ms.csv",id,tiv) for id in allids]
-ph=(gr=true,j2_sun=true,j2_earth=true,j3_earth=true,j4_earth=true,yarkovsky=true,A1=5.0e-13,A2=-2.9e-14,A3=0.0)
-p=(mus=vcat(bmus,amus),ids=allids,bodies=bod,physics=ph)
+# Setup sinplifikatua: GM-ak ID-etatik (planet_system), 11 planeta + 16 asteroide, GR_EIH + Yarkovsky.
+tiv=(et_0-5*DAY2S,et_2030+5*DAY2S)
+ids,mus,bodies=planet_system(tiv; asteroids=true, coeffs_json="data/coeffs_ms.json", coeffs_csv="data/coeffs_ms.csv")
+p=(mus=mus,ids=ids,bodies=bodies,physics=(; DEFAULT_PHYSICS..., yarkovsky=true,A1=5.0e-13,A2=-2.9e-14,A3=0.0))
 solve(ODEProblem(f_master!,u0_holman,(et_0,et_0+3600.0),p),IRKGL16();reltol=1e-12,abstol=1e-12,save_everystep=false)
 run2030(ui,eti)=(s=solve(ODEProblem(f_master!,ui,(eti,et_2030),p),IRKGL16();reltol=1e-12,abstol=1e-12,save_everystep=false); s.u[end][1:3]./AU2KM)
 

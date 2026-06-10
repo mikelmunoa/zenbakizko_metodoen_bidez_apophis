@@ -33,25 +33,14 @@ sun_st, _ = spkez(Int32(10), et_0, "J2000", "NONE", Int32(0))
 u0 = [helio_pos[1]*AU2KM + sun_st[1],        helio_pos[2]*AU2KM + sun_st[2],        helio_pos[3]*AU2KM + sun_st[3],
       helio_vel[1]*AU2KM/DAY2S + sun_st[4],  helio_vel[2]*AU2KM/DAY2S + sun_st[5],  helio_vel[3]*AU2KM/DAY2S + sun_st[6]]
 
-# ── Gorputzak, GM-ak eta indarrak ───────────────────────────────────────────
-body_ids = [10, 399, 301, 1, 2, 4, 5, 6, 7, 8]
-body_mus = [1.32712440041279e11, 398600.436, 4902.800, 22031.869, 324858.592,
-            42828.376, 1.267127641e8, 3.7940584842e7, 5.7945564e6, 6.836527101e6]
-ast_ids  = [2_000_001,2_000_002,2_000_003,2_000_004,2_000_007,2_000_010,
-            2_000_015,2_000_016,2_000_031,2_000_052,2_000_065,2_000_087,
-            2_000_088,2_000_107,2_000_511,2_000_704]
-ast_mus  = [62.6289,13.6659,1.9206,17.2882,1.1399,5.6251,2.0230,1.5897,
-            1.0794,2.6830,0.9381,2.1682,1.1898,1.4437,3.8945,2.8304]
-
+# ── Gorputzak, GM-ak eta indarrak (setup sinplifikatua: planet_system) ───────
+# GM-ak ID-etatik (gm_de440.tpc), 11 planeta + 16 asteroide; GR_EIH + harmonikoak + Yarkovsky.
 tiv = (et_0 - 5*DAY2S, t_30*DAY2S + 5*DAY2S)
-all_ids = vcat(body_ids, ast_ids)
-fallback = Dict{Int,Tuple{Int,Int}}(id => (13,8) for id in ast_ids); fallback[399] = (13,8)
-create_coeffs_file(joinpath(DATA,"coeffs_bi.json"), joinpath(DATA,"coeffs_bi.csv"),
-                   all_ids, fill(tiv, length(all_ids)); fallback_params=fallback)
-bodies = [BodyCoeffs(joinpath(DATA,"coeffs_bi.json"), joinpath(DATA,"coeffs_bi.csv"), id, tiv) for id in all_ids]
-physics = (gr=true, j2_sun=true, j2_earth=true, j3_earth=true, j4_earth=true,
-           yarkovsky=true, A1=5.0e-13, A2=-2.9e-14, A3=0.0)
-p = (mus=vcat(body_mus,ast_mus), ids=all_ids, bodies=bodies, physics=physics)
+ids, mus, bodies = planet_system(tiv; datadir=DATA, asteroids=true,
+                                 coeffs_json=joinpath(DATA,"coeffs_bi.json"),
+                                 coeffs_csv=joinpath(DATA,"coeffs_bi.csv"))
+p = (mus=mus, ids=ids, bodies=bodies,
+     physics=(; DEFAULT_PHYSICS..., yarkovsky=true, A1=5.0e-13, A2=-2.9e-14, A3=0.0))
 
 # ── Posizioa kalkulatu (et_0 → t_egun), AU-tan ───────────────────────────────
 solve(ODEProblem(f_master!, u0, (et_0, et_0+3600.0), p), IRKGL16();

@@ -1,0 +1,17 @@
+KPL/PCK
+\begintext
+  DE440 GM balioak (km^3/s^2), linux_p1550p2650.440 goiburutik sortua (zehaztasun osoa).
+\begindata
+   BODY10_GM    = ( 132712440041.27942 )
+   BODY1_GM    = ( 22031.868551400003 )
+   BODY2_GM    = ( 324858.592 )
+   BODY399_GM    = ( 398600.43550702266 )
+   BODY301_GM    = ( 4902.80011845755 )
+   BODY3_GM    = ( 403503.2356254802 )
+   BODY4_GM    = ( 42828.3758157561 )
+   BODY5_GM    = ( 126712764.09999998 )
+   BODY6_GM    = ( 37940584.8418 )
+   BODY7_GM    = ( 5794556.3999999985 )
+   BODY8_GM    = ( 6836527.100580399 )
+   BODY9_GM    = ( 975.5 )
+\begintext
